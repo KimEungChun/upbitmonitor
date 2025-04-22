@@ -1,2 +1,1 @@
 # upbitmonitor
-upbitmonitor
