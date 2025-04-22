@@ -45,7 +45,7 @@ def send_alert(symbol, change_percent, percent_from_prev_day, direction, minutes
 
     change_str = f"{change_percent:+.2f}%"
     prev_day_str = f"{percent_from_prev_day:+.2f}%"
-    message = f"[{symbol}] {minutes_ago}분 전보다 {direction}: {change_str} (전일대비: {prev_day_str})"
+    message = f"[{symbol}] {minutes_ago}분 전보다 {direction}: {change_str} (전일: {prev_day_str})"
     log(f"🚨 ALERT ({minutes_ago}분): {message}")
 
     try:
