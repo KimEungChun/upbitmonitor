@@ -30,7 +30,7 @@ def get_top_krw_markets(limit=20):
     return sorted_data[:limit]
 
 def log(message):
-    timestamp = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    timestamp = datetime.now().strftime("[%H:%M:%S]")
     full_message = f"{timestamp} {message}"
     print(full_message)
     with open(LOG_FILE, "a", encoding="utf-8") as f:
