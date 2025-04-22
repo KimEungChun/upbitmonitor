@@ -62,7 +62,7 @@ def send_healthcheck():
         try:
             requests.post(SLACK_WEBHOOK_URL, json={"text": message})
         except Exception as e:
-            log(f"Slack 헬스체크 전송 실패: {e}")
+            log(f"Slack 헬스크 전송 실패: {e}")
         last_healthcheck = now
 
 def monitor():
