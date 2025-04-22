@@ -21,7 +21,7 @@ def get_top_krw_markets(limit=20):  # 수정된 부분: limit 기본값 20
 @app.route("/metrics")
 def metrics():
     top_data = get_top_krw_markets(20)  # 수정된 부분: 20개 사용
-    output = "# HELP upbit_price 업비트 가격\n"
+    output = "# HELP upbit_price 업비 가격\n"
     output += "# TYPE upbit_price gauge\n"
 
     for item in top_data:
