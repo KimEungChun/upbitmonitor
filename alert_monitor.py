@@ -57,7 +57,7 @@ def send_healthcheck():
     global last_healthcheck
     now = int(time.time())
     if now - last_healthcheck >= HEALTHCHECK_INTERVAL:
-        message = f"✅ [헬스] 모니터링 정상 작동 중 ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
+        message = f"✅ [헬스] 모터링 정상 작동 중 ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
         log(message)
         try:
             requests.post(SLACK_WEBHOOK_URL, json={"text": message})
