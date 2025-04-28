@@ -29,7 +29,7 @@ def send_slack_alert(msg):
     try:
         requests.post(SLACK_WEBHOOK_URL, json={"text": msg})
     except Exception as e:
-        log(f"Slack 전송 실패: {e}")
+        log(f"Slack 전 실패: {e}")
 
 # ===== 데이터 수집 =====
 def fetch_candles(symbol, count=6):
