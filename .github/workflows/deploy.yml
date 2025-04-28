@@ -1,0 +1,26 @@
+name: Deploy Alert System to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: SSH Deploy and Restart alert.py
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.AZURE_HOST }}
+          username: oozz
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          script: |
+            pkill -f alert.py || true   # 기존 alert.py 종료 (없으면 무시)
+            cd ~/upbitmonitor
+            git pull origin main
+            nohup python3 alert.py > logs/alert.out 2>&1 &
