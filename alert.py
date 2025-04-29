@@ -1,18 +1,17 @@
 import time
 import requests
 import pandas as pd
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime
 from dotenv import load_dotenv
 import os
 
 # 환경 변수 로드
-# 슬랙 웹훅 주소 직접 설정
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
-
+load_dotenv()
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 
 # ===== 설정 =====
-INTERVAL = 60  # 1분마다 실행
+INTERVAL = 60
 ALERT_COOLDOWN = 300  # 5분 쿨다운
 
 # ===== 상태 저장 =====
@@ -29,7 +28,7 @@ def send_slack_alert(msg):
     try:
         requests.post(SLACK_WEBHOOK_URL, json={"text": msg})
     except Exception as e:
-        log(f"Slack 전 실패: {e}")
+        log(f"Slack 전송 실패: {e}")
 
 # ===== 데이터 수집 =====
 def fetch_candles(symbol, count=6):
@@ -42,7 +41,7 @@ def fetch_candles(symbol, count=6):
                 if not df.empty:
                     return df.iloc[::-1].reset_index(drop=True)
         except Exception as e:
-            log(f"❌ {symbol} 캔들 요청 실패 ({i+1}회): {e}")
+            log(f"❌ {symbol} 칸들 요청 실패 ({i+1}회): {e}")
         time.sleep(0.3)
     return pd.DataFrame()
 
@@ -56,6 +55,7 @@ def detect_change(symbol):
     name = symbol.split('-')[1]
     now = time.time()
 
+    # 현재가, 2분 전, 5분 전 가격
     p0 = df.loc[0, 'trade_price']
     p2 = df.loc[2, 'trade_price']
     p5 = df.loc[5, 'trade_price']
@@ -66,38 +66,34 @@ def detect_change(symbol):
     key_2 = symbol + '_2min'
     key_5 = symbol + '_5min'
 
+    # 5분 먼저 체크
     if abs(change_5) >= 2.0:
         if now - alerted_at[key_5] > ALERT_COOLDOWN:
-            direction = "상승" if change_5 > 0 else "하락"
-            msg = f"📊 {name} {direction} 중 (5분대비: {change_5:+.2f}%) (금일: {change_day:+.1f}%)"
+            dir = "상승" if change_5 > 0 else "하락"
+            msg = f"📊 {name} {dir} 중 (5분대비: {change_5:+.2f}%) (금일: {change_day:+.1f}%)"
             log(msg)
             send_slack_alert(msg)
             alerted_at[key_5] = now
-            alerted_at[key_2] = now
+            alerted_at[key_2] = now  # 2분 중복 방지용 조기 설정
 
     elif abs(change_2) >= 1.5:
         if now - alerted_at[key_2] > ALERT_COOLDOWN:
-            direction = "상승" if change_2 > 0 else "하락"
-            msg = f"📊 {name} {direction} 중 (2분대비: {change_2:+.2f}%) (금일: {change_day:+.1f}%)"
+            dir = "상승" if change_2 > 0 else "하락"
+            msg = f"📊 {name} {dir} 중 (2분대비: {change_2:+.2f}%) (금일: {change_day:+.1f}%)"
             log(msg)
             send_slack_alert(msg)
             alerted_at[key_2] = now
 
 # ===== 종목 선정 =====
 def get_top_symbols():
-    try:
-        market_url = "https://api.upbit.com/v1/market/all"
-        all_markets = requests.get(market_url).json()
-        krw_markets = [m['market'] for m in all_markets if m['market'].startswith("KRW-")]
+    url = "https://api.upbit.com/v1/market/all"
+    markets = requests.get(url).json()
+    krw_markets = [m['market'] for m in markets if m['market'].startswith("KRW-")]
 
-        ticker_url = f"https://api.upbit.com/v1/ticker?markets={','.join(krw_markets)}"
-        tickers = requests.get(ticker_url).json()
-
-        sorted_data = sorted(tickers, key=lambda x: x['acc_trade_price_24h'], reverse=True)
-        return [item['market'] for item in sorted_data[:20]]
-    except Exception as e:
-        log(f"⚠️ 상위 종목 조회 실패: {e}")
-        return []
+    ticker_url = f"https://api.upbit.com/v1/ticker?markets={','.join(krw_markets)}"
+    tickers = requests.get(ticker_url).json()
+    sorted_data = sorted(tickers, key=lambda x: x['acc_trade_price_24h'], reverse=True)
+    return [item['market'] for item in sorted_data[:20]]
 
 # ===== 메인 루프 =====
 def main():
@@ -106,6 +102,7 @@ def main():
         try:
             symbols = get_top_symbols()
             log(f"🔍 감시 대상: {[s.split('-')[1] for s in symbols]}")
+            
             for symbol in symbols:
                 detect_change(symbol)
             time.sleep(INTERVAL)
