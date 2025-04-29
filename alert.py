@@ -103,7 +103,7 @@ async def detect_change(symbol):
     is_bullish = ha_df.loc[0, 'close'] > ha_df.loc[0, 'open']
 
     if was_bearish and is_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
-        msg = f"🔄 {name} 하이킨아시 추세 전환 (음봉 ➔ 양봉)"
+        msg = f"🚨 {name} 하이킨아시 추세 전환 (음봉 ➔ 양봉)"
         log(msg)
         await send_telegram_alert(msg)
         trend_alerted_at[key_trend] = now
