@@ -20,6 +20,10 @@ jobs:
           username: oozz 
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
+            mkdir -p logs
             cd ~/upbitmonitor
+            git reset --hard HEAD
+            git clean -fd
             git pull origin main
             nohup python3 alert.py > logs/alert.log 2>&1 &
+

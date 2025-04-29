@@ -10,7 +10,7 @@ SPECIAL_SYMBOLS = {"KRW-BTC", "KRW-XRP"}
 
 LOG_FILE = "price_log.txt"
 HEALTHCHECK_INTERVAL = 3600
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
 # 데이터 저장
 price_history = defaultdict(lambda: deque(maxlen=6))

@@ -3,12 +3,10 @@ import requests
 import pandas as pd
 from collections import defaultdict, deque
 from datetime import datetime
-from dotenv import load_dotenv
 import os
 
 # 환경 변수 로드
-load_dotenv()
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
 # ===== 설정 =====
 INTERVAL = 60
