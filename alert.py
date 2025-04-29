@@ -8,18 +8,13 @@ import asyncio
 from telegram import Bot
 
 # ===== 텔레그램 설정 =====
-# 아까 복사한 Bot Token
 TELEGRAM_TOKEN = "7475326912:AAHdnqpXNyOiSclg56zFvqu3gTq3CDXexXU"
-# 아까 찾은 내 Chat ID
 TELEGRAM_CHAT_ID = 7692872494
-
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # ===== 시스템 설정 =====
 INTERVAL = 60
 ALERT_COOLDOWN = 300  # 5분 쿨다운
-
-# 상태
 alerted_at = defaultdict(lambda: 0)
 
 # ===== 유틸 =====
@@ -82,7 +77,7 @@ async def detect_change(symbol):
 
     if abs(change_5) >= 2.0 and now - alerted_at[key_5] > ALERT_COOLDOWN:
         dir = "상승" if change_5 > 0 else "하락"
-        msg = f"📈 {name} {dir} 중 (5분 대비 {change_5:+.2f}%) (금일 {change_day:+.1f}%)"
+        msg = f"📈 {name} {dir} 중 (5분 대비 {change_5:+.2f}%) (전일대비: {change_day:+.2f}%)"
         log(msg)
         await send_telegram_alert(msg)
         alerted_at[key_5] = now
@@ -90,7 +85,7 @@ async def detect_change(symbol):
 
     elif abs(change_2) >= 1.5 and now - alerted_at[key_2] > ALERT_COOLDOWN:
         dir = "상승" if change_2 > 0 else "하락"
-        msg = f"📈 {name} {dir} 중 (2분 대비 {change_2:+.2f}%) (금일 {change_day:+.1f}%)"
+        msg = f"📈 {name} {dir} 중 (2분 대비 {change_2:+.2f}%) (전일대비: {change_day:+.2f}%)"
         log(msg)
         await send_telegram_alert(msg)
         alerted_at[key_2] = now
@@ -99,7 +94,7 @@ async def detect_change(symbol):
 async def main():
     log("🚀 1분봉 변화 감시 시스템 시작")
     await send_telegram_alert("🚀 Azure 서버 1분봉 감시 시스템 시작됨")
-    
+
     while True:
         try:
             symbols = get_top_symbols()
