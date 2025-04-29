@@ -14,8 +14,9 @@ bot = Bot(token=TELEGRAM_TOKEN)
 
 # ===== 시스템 설정 =====
 INTERVAL = 60
-ALERT_COOLDOWN = 300  # 5분 쿨다운
+ALERT_COOLDOWN = 300
 alerted_at = defaultdict(lambda: 0)
+trend_alerted_at = defaultdict(lambda: 0)
 
 # ===== 유틸 =====
 def log(msg):
@@ -55,45 +56,68 @@ def get_top_symbols():
         log(f"❌ 종목 리스트 가져오기 실패: {e}")
         return []
 
+# ===== 하이킨 아시 변환 =====
+def convert_to_heikin_ashi(df):
+    ha_df = pd.DataFrame(index=df.index)
+    ha_df['close'] = (df['opening_price'] + df['high_price'] + df['low_price'] + df['trade_price']) / 4
+
+    ha_open = [(df['opening_price'][0] + df['trade_price'][0]) / 2]
+    for i in range(1, len(df)):
+        ha_open.append((ha_open[i-1] + ha_df['close'][i-1]) / 2)
+    ha_df['open'] = ha_open
+
+    ha_df['high'] = df[['high_price', 'opening_price', 'trade_price']].max(axis=1)
+    ha_df['low'] = df[['low_price', 'opening_price', 'trade_price']].min(axis=1)
+
+    return ha_df
+
 # ===== 감시 및 분석 =====
 async def detect_change(symbol):
     df = fetch_candles(symbol, 6)
-    if df.empty or len(df) < 6:
+    if df.empty or len(df) < 4:
         log(f"⚠️ {symbol}: 데이터 부족")
         return
 
     now = time.time()
     name = symbol.split('-')[1]
     p0 = df.loc[0, 'trade_price']
-    p2 = df.loc[2, 'trade_price']
-    p5 = df.loc[5, 'trade_price']
-
-    change_2 = ((p0 - p2) / p2) * 100
-    change_5 = ((p0 - p5) / p5) * 100
+    p3 = df.loc[3, 'trade_price']
     change_day = df.loc[0, 'change_rate'] * 100 if 'change_rate' in df.columns else 0
 
-    key_2 = symbol + '_2min'
-    key_5 = symbol + '_5min'
+    key_3min = symbol + '_3min'
+    key_trend = symbol + '_trend'
 
-    if abs(change_5) >= 2.0 and now - alerted_at[key_5] > ALERT_COOLDOWN:
-        dir = "상승" if change_5 > 0 else "하락"
-        msg = f"📈 {name} {dir} 중 (5분 대비 {change_5:+.2f}%) (전일대비: {change_day:+.2f}%)"
+    # 1. 3분 변동률 알림
+    change_3min = ((p0 - p3) / p3) * 100
+    if abs(change_3min) >= 2.0 and now - alerted_at[key_3min] > ALERT_COOLDOWN:
+        dir = "상승" if change_3min > 0 else "하락"
+        msg = f"📈 {name} {dir} 중 (3분 대비 {change_3min:+.2f}%) (전일대비: {change_day:+.2f}%)"
         log(msg)
         await send_telegram_alert(msg)
-        alerted_at[key_5] = now
-        alerted_at[key_2] = now
+        alerted_at[key_3min] = now
 
-    elif abs(change_2) >= 1.5 and now - alerted_at[key_2] > ALERT_COOLDOWN:
-        dir = "상승" if change_2 > 0 else "하락"
-        msg = f"📈 {name} {dir} 중 (2분 대비 {change_2:+.2f}%) (전일대비: {change_day:+.2f}%)"
+    # 2. 하이킨 아시 추세 전환
+    ha_df = convert_to_heikin_ashi(df)
+
+    was_bearish = ha_df.loc[1, 'close'] < ha_df.loc[1, 'open']
+    is_bullish = ha_df.loc[0, 'close'] > ha_df.loc[0, 'open']
+
+    if was_bearish and is_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
+        msg = f"🔄 {name} 하이킨아시 추세 전환 (음봉 ➔ 양봉)"
         log(msg)
         await send_telegram_alert(msg)
-        alerted_at[key_2] = now
+        trend_alerted_at[key_trend] = now
+
+    elif not was_bearish and not is_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
+        msg = f"🔄 {name} 하이킨아시 추세 전환 (양봉 ➔ 음봉)"
+        log(msg)
+        await send_telegram_alert(msg)
+        trend_alerted_at[key_trend] = now
 
 # ===== 메인 =====
 async def main():
-    log("🚀 1분봉 변화 감시 시스템 시작")
-    await send_telegram_alert("🚀 Azure 서버 1분봉 감시 시스템 시작됨")
+    log("🚀 1분봉 변화 감시 시스템 시작 (하이킨아시 버전)")
+    await send_telegram_alert("🚀 Azure 서버 1분봉 감시 시스템 시작됨 (하이킨아시 감시)")
 
     while True:
         try:
