@@ -8,8 +8,9 @@ import asyncio
 from telegram import Bot
 
 # ===== 텔레그램 설정 =====
-TELEGRAM_TOKEN = "7475326912:AAHdnqpXNyOiSclg56zFvqu3gTq3CDXexXU"
-TELEGRAM_CHAT_ID = 7692872494
+TELEGRAM_TOKEN = "여기에_너의_텔레그램_토큰"
+TELEGRAM_CHAT_ID = 너의_채팅_ID  # 숫자
+
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # ===== 시스템 설정 =====
@@ -32,7 +33,7 @@ async def send_telegram_alert(msg):
     except Exception as e:
         log(f"Telegram 전송 실패: {e}")
 
-# ===== 데이터 =====
+# ===== 데이터 수집 =====
 def fetch_candles(symbol, count=6):
     url = f"https://api.upbit.com/v1/candles/minutes/1?market={symbol}&count={count}"
     try:
@@ -49,11 +50,9 @@ def get_top_symbols():
     try:
         market_res = requests.get("https://api.upbit.com/v1/market/all", timeout=5)
         krw_markets = [m['market'] for m in market_res.json() if m['market'].startswith("KRW-")]
-
         ticker_url = f"https://api.upbit.com/v1/ticker?markets={','.join(krw_markets)}"
         ticker_res = requests.get(ticker_url, timeout=5)
         sorted_data = sorted(ticker_res.json(), key=lambda x: x['acc_trade_price_24h'], reverse=True)
-
         return [item['market'] for item in sorted_data[:20]]
     except Exception as e:
         log(f"❌ 종목 리스트 가져오기 실패: {e}")
@@ -79,16 +78,14 @@ async def detect_change(symbol):
     key_2 = symbol + '_2min'
     key_5 = symbol + '_5min'
 
-    # 5분 변동 먼저 체크
     if abs(change_5) >= 2.0 and now - alerted_at[key_5] > ALERT_COOLDOWN:
         dir = "상승" if change_5 > 0 else "하락"
         msg = f"📈 {name} {dir} 중 (5분 대비 {change_5:+.2f}%) (금일 {change_day:+.1f}%)"
         log(msg)
         await send_telegram_alert(msg)
         alerted_at[key_5] = now
-        alerted_at[key_2] = now  # 2분 중복 방지
+        alerted_at[key_2] = now
 
-    # 2분 변동 체크
     elif abs(change_2) >= 1.5 and now - alerted_at[key_2] > ALERT_COOLDOWN:
         dir = "상승" if change_2 > 0 else "하락"
         msg = f"📈 {name} {dir} 중 (2분 대비 {change_2:+.2f}%) (금일 {change_day:+.1f}%)"
@@ -99,6 +96,8 @@ async def detect_change(symbol):
 # ===== 메인 =====
 async def main():
     log("🚀 1분봉 변화 감시 시스템 시작")
+    await send_telegram_alert("🚀 Azure 서버 1분봉 감시 시스템 시작됨")
+    
     while True:
         try:
             symbols = get_top_symbols()
