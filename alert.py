@@ -8,8 +8,10 @@ import asyncio
 from telegram import Bot
 
 # ===== 텔레그램 설정 =====
-TELEGRAM_TOKEN = "여기에_너의_텔레그램_토큰"
-TELEGRAM_CHAT_ID = 너의_채팅_ID  # 숫자
+# 아까 복사한 Bot Token
+TELEGRAM_TOKEN = "7475326912:AAHdnqpXNyOiSclg56zFvqu3gTq3CDXexXU"
+# 아까 찾은 내 Chat ID
+TELEGRAM_CHAT_ID = 7692872494
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
