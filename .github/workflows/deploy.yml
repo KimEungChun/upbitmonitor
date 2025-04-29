@@ -20,10 +20,12 @@ jobs:
           username: oozz 
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
-            mkdir -p logs
             cd ~/upbitmonitor
+            mkdir -p logs
             git reset --hard HEAD
             git clean -fd
             git pull origin main
-            python3 alert.py > logs/alert.log 2>&1 &
+            pkill -f alert.py || true   # 기존 alert.py 죽이기 (없어도 에러 무시)
+            nohup python3 alert.py > logs/alert.log 2>&1 &
+
 
