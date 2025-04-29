@@ -24,7 +24,7 @@ jobs:
             git reset --hard HEAD
             git clean -fd
             git pull origin main
-            python3 alert.py
+       
 
 
 
