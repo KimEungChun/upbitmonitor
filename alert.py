@@ -4,9 +4,15 @@ import pandas as pd
 from collections import defaultdict
 from datetime import datetime
 import os
+import asyncio
+from telegram import Bot
 
-# ===== 설정 =====
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/xxxx/yyyy/zzzz"
+# ===== 텔레그램 설정 =====
+TELEGRAM_TOKEN = "7475326912:AAHdnqpXNyOiSclg56zFvqu3gTq3CDXexXU"
+TELEGRAM_CHAT_ID = 7692872494
+bot = Bot(token=TELEGRAM_TOKEN)
+
+# ===== 시스템 설정 =====
 INTERVAL = 60
 ALERT_COOLDOWN = 300  # 5분 쿨다운
 
@@ -20,13 +26,11 @@ def log(msg):
     with open("alert_unified.log", "a", encoding="utf-8") as f:
         f.write(f"{timestamp} {msg}\n")
 
-def send_slack_alert(msg):
+async def send_telegram_alert(msg):
     try:
-        response = requests.post(SLACK_WEBHOOK_URL, json={"text": msg}, timeout=5)
-        if response.status_code != 200:
-            log(f"Slack 전송 실패: {response.status_code} {response.text}")
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
     except Exception as e:
-        log(f"Slack 오류: {e}")
+        log(f"Telegram 전송 실패: {e}")
 
 # ===== 데이터 =====
 def fetch_candles(symbol, count=6):
@@ -56,7 +60,7 @@ def get_top_symbols():
         return []
 
 # ===== 감시 및 분석 =====
-def detect_change(symbol):
+async def detect_change(symbol):
     df = fetch_candles(symbol, 6)
     if df.empty or len(df) < 6:
         log(f"⚠️ {symbol}: 데이터 부족")
@@ -80,7 +84,7 @@ def detect_change(symbol):
         dir = "상승" if change_5 > 0 else "하락"
         msg = f"📈 {name} {dir} 중 (5분 대비 {change_5:+.2f}%) (금일 {change_day:+.1f}%)"
         log(msg)
-        send_slack_alert(msg)
+        await send_telegram_alert(msg)
         alerted_at[key_5] = now
         alerted_at[key_2] = now  # 2분 중복 방지
 
@@ -89,11 +93,11 @@ def detect_change(symbol):
         dir = "상승" if change_2 > 0 else "하락"
         msg = f"📈 {name} {dir} 중 (2분 대비 {change_2:+.2f}%) (금일 {change_day:+.1f}%)"
         log(msg)
-        send_slack_alert(msg)
+        await send_telegram_alert(msg)
         alerted_at[key_2] = now
 
 # ===== 메인 =====
-def main():
+async def main():
     log("🚀 1분봉 변화 감시 시스템 시작")
     while True:
         try:
@@ -101,11 +105,11 @@ def main():
             if symbols:
                 log(f"🔍 감시 대상: {[s.split('-')[1] for s in symbols]}")
                 for symbol in symbols:
-                    detect_change(symbol)
-            time.sleep(INTERVAL)
+                    await detect_change(symbol)
+            await asyncio.sleep(INTERVAL)
         except Exception as e:
             log(f"오류 발생: {e}")
-            time.sleep(10)
+            await asyncio.sleep(10)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
