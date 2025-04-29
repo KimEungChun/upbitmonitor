@@ -8,7 +8,7 @@ import os
 
 # 환경 변수 로드
 # 슬랙 웹훅 주소 직접 설정
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
+SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/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"
 
 
 # ===== 설정 =====
