@@ -96,16 +96,19 @@ async def detect_change(symbol):
         await send_telegram_alert(msg)
         alerted_at[key_3min] = now
 
-    # 2. 하이킨 아시 추세 전환 (보수적 판단)
-    ha_df = convert_to_heikin_ashi(df)
+    # 보수적 판단 기준 (5개 캔들 필요)
+    if len(ha_df) < 5:
+        log(f"⚠️ {symbol}: 추세판단 위한 데이터 부족")
+        return
 
-    # 과거 2봉이 동일 추세인지
-    prev_bearish = all(ha_df.loc[i, 'close'] < ha_df.loc[i, 'open'] for i in [3, 2])
-    prev_bullish = all(ha_df.loc[i, 'close'] > ha_df.loc[i, 'open'] for i in [3, 2])
+    # 과거 2봉: [4], [3] → 동일 추세여야 함
+    prev_bearish = all(ha_df.loc[i, 'close'] < ha_df.loc[i, 'open'] for i in [4, 3])
+    prev_bullish = all(ha_df.loc[i, 'close'] > ha_df.loc[i, 'open'] for i in [4, 3])
 
-    # 현재 2봉이 반대 추세로 연속인지
-    curr_bullish = all(ha_df.loc[i, 'close'] > ha_df.loc[i, 'open'] for i in [1, 0])
-    curr_bearish = all(ha_df.loc[i, 'close'] < ha_df.loc[i, 'open'] for i in [1, 0])
+    # 직전 2봉: [2], [1] → 반대 추세로 전환돼야 함
+    curr_bullish = all(ha_df.loc[i, 'close'] > ha_df.loc[i, 'open'] for i in [2, 1])
+    curr_bearish = all(ha_df.loc[i, 'close'] < ha_df.loc[i, 'open'] for i in [2, 1])
+
 
     if prev_bearish and curr_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
         msg = f"🚨 {name} 하이킨아시 추세 전환 (음봉 ➔ 양봉 확정)"
