@@ -96,9 +96,12 @@ async def detect_change(symbol):
         await send_telegram_alert(msg)
         alerted_at[key_3min] = now
 
-    # 보수적 판단 기준 (5개 캔들 필요)
-    if len(ha_df) < 5:
-        log(f"⚠️ {symbol}: 추세판단 위한 데이터 부족")
+    # 2. 하이킨 아시 추세 전환 (보수적 판단)
+    ha_df = convert_to_heikin_ashi(df)
+
+    # 💥 ha_df가 없거나 데이터 부족한 경우 빠르게 탈출
+    if ha_df is None or ha_df.empty or len(ha_df) < 5:
+        log(f"⚠️ {symbol}: Heikin-Ashi 데이터 부족 또는 생성 실패")
         return
 
     # 과거 2봉: [4], [3] → 동일 추세여야 함
