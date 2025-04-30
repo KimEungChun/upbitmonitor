@@ -74,7 +74,7 @@ def convert_to_heikin_ashi(df):
 # ===== 감시 및 분석 =====
 async def detect_change(symbol):
     df = fetch_candles(symbol, 6)
-    if df.empty or len(df) < 4:
+    if df.empty or len(df) < 5:
         log(f"⚠️ {symbol}: 데이터 부족")
         return
 
@@ -96,28 +96,33 @@ async def detect_change(symbol):
         await send_telegram_alert(msg)
         alerted_at[key_3min] = now
 
-    # 2. 하이킨 아시 추세 전환
+    # 2. 하이킨 아시 추세 전환 (보수적 판단)
     ha_df = convert_to_heikin_ashi(df)
 
-    was_bearish = ha_df.loc[1, 'close'] < ha_df.loc[1, 'open']
-    is_bullish = ha_df.loc[0, 'close'] > ha_df.loc[0, 'open']
+    # 과거 2봉이 동일 추세인지
+    prev_bearish = all(ha_df.loc[i, 'close'] < ha_df.loc[i, 'open'] for i in [3, 2])
+    prev_bullish = all(ha_df.loc[i, 'close'] > ha_df.loc[i, 'open'] for i in [3, 2])
 
-    if was_bearish and is_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
-        msg = f"🚨 {name} 하이킨아시 추세 전환 (음봉 ➔ 양봉)"
+    # 현재 2봉이 반대 추세로 연속인지
+    curr_bullish = all(ha_df.loc[i, 'close'] > ha_df.loc[i, 'open'] for i in [1, 0])
+    curr_bearish = all(ha_df.loc[i, 'close'] < ha_df.loc[i, 'open'] for i in [1, 0])
+
+    if prev_bearish and curr_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
+        msg = f"🚨 {name} 하이킨아시 추세 전환 (음봉 ➔ 양봉 확정)"
         log(msg)
         await send_telegram_alert(msg)
         trend_alerted_at[key_trend] = now
 
-    elif not was_bearish and not is_bullish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
-        msg = f"🔄 {name} 하이킨아시 추세 전환 (양봉 ➔ 음봉)"
+    elif prev_bullish and curr_bearish and now - trend_alerted_at[key_trend] > ALERT_COOLDOWN:
+        msg = f"🔄 {name} 하이킨아시 추세 전환 (양봉 ➔ 음봉 확정)"
         log(msg)
         await send_telegram_alert(msg)
         trend_alerted_at[key_trend] = now
 
 # ===== 메인 =====
 async def main():
-    log("🚀 1분봉 변화 감시 시스템 시작 (하이킨아시 버전)")
-    await send_telegram_alert("🚀 Azure 서버 1분봉 감시 시스템 시작됨 (하이킨아시 감시)")
+    log("🚀 1분봉 변화 감시 시스템 시작 (하이킨아시: 보수적 기준)")
+    await send_telegram_alert("🚀 Azure 서버 1분봉 감시 시스템 시작됨 (하이킨아시 보수적 모드)")
 
     while True:
         try:
