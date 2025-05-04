@@ -13,8 +13,7 @@ bot = Bot(token=TELEGRAM_TOKEN)
 # ===== 시스템 설정 =====
 LOG_FILE = "price_log.txt"
 HEALTHCHECK_INTERVAL = 3600
-INTERVAL = 300
-  # 5분 간격
+INTERVAL = 300  # 5분 간격
 last_healthcheck = 0
 
 # 유틸 함수
@@ -107,11 +106,18 @@ def detect_price_pattern(ohlcv_data):
     highs = [c['high_price'] for c in ohlcv_data]
     lows = [c['low_price'] for c in ohlcv_data]
 
-    recent_high = max(highs[-5:])
-    recent_low = min(lows[-5:])
+    recent_highs = highs[-20:]
+    recent_lows = lows[-20:]
 
-    high_breaks = sum(1 for i in range(1, len(highs)) if highs[i] > max(highs[:i]))
-    low_breaks = sum(1 for i in range(1, len(lows)) if lows[i] < min(lows[:i]))
+    high_range = max(recent_highs)
+    low_range = min(recent_lows)
+    spread_ratio = (high_range - low_range) / low_range * 100
+
+    if spread_ratio < 3.0:
+        return "보합중"
+
+    high_breaks = sum(1 for i in range(5, len(highs)) if highs[i] > max(highs[i-5:i]) * 1.01)
+    low_breaks = sum(1 for i in range(5, len(lows)) if lows[i] < min(lows[i-5:i]) * 0.99)
 
     if high_breaks >= 2:
         return "상승중"
@@ -134,7 +140,9 @@ async def monitor():
 
             buy_alerts = []
             other_alerts = []
-            trend_messages = []
+            trends_up = []
+            trends_down = []
+            trends_flat = []
 
             for symbol in symbols:
                 ohlcv_data = get_ohlcv(symbol)
@@ -146,7 +154,13 @@ async def monitor():
                 trend = detect_price_pattern(ohlcv_data)
 
                 coin_name = symbol.split('-')[1]
-                trend_messages.append(f"{coin_name}: {trend}")
+                if trend == "상승중":
+                    trends_up.append(coin_name)
+                elif trend == "하락중":
+                    trends_down.append(coin_name)
+                else:
+                    trends_flat.append(coin_name)
+
                 if is_buy:
                     buy_alerts.append(coin_name)
                 else:
@@ -158,7 +172,9 @@ async def monitor():
                 "\n📉 그 외 종목:",
                 ", ".join(other_alerts[:10]) or "없음",
                 "\n📈 추세 분석:",
-                "\n".join(trend_messages[:20])
+                f"상승중: {', '.join(trends_up) or '없음'}",
+                f"하락중: {', '.join(trends_down) or '없음'}",
+                f"보합중: {', '.join(trends_flat) or '없음'}"
             ])
             log(msg)
             await send_telegram_alert(msg)
