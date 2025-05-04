@@ -1,9 +1,7 @@
-# check_market_alert.py (가격 모니터링 + 텔레그램 알림)
-
 import time
 import requests
 from datetime import datetime
-from collections import defaultdict, deque
+from collections import defaultdict
 import asyncio
 from telegram import Bot
 
@@ -13,17 +11,10 @@ TELEGRAM_CHAT_ID = 7692872494
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # ===== 시스템 설정 =====
-THRESHOLDS_DEFAULT = {1: 1.0, 3: 3.0}
-THRESHOLDS_SPECIAL = {1: 0.33, 3: 0.66}
-SPECIAL_SYMBOLS = {"KRW-BTC", "KRW-XRP"}
 LOG_FILE = "price_log.txt"
 HEALTHCHECK_INTERVAL = 3600
-INTERVAL = 60
-
-# 상태 저장
-price_history = defaultdict(lambda: deque(maxlen=6))
-prev_day_price = {}
-alerted_at = defaultdict(lambda: 0)
+INTERVAL = 300
+  # 5분 간격
 last_healthcheck = 0
 
 # 유틸 함수
@@ -50,7 +41,7 @@ async def send_healthcheck():
         await send_telegram_alert(message)
         last_healthcheck = now
 
-# 시장 정보 조회
+# API 호출 함수
 
 def get_top_krw_markets(limit=20):
     try:
@@ -66,45 +57,111 @@ def get_top_krw_markets(limit=20):
         log(f"❌ 종목 리스트 가져오기 실패: {e}")
         return []
 
+def get_ohlcv(symbol):
+    try:
+        url = f"https://api.upbit.com/v1/candles/minutes/5?market={symbol}&count=100"
+        return requests.get(url).json()
+    except Exception as e:
+        log(f"❌ OHLCV 가져오기 실패 ({symbol}): {e}")
+        return []
+
+# 하이킨 아시 변환
+
+def convert_to_heikin_ashi(ohlcv_data):
+    ha_data = []
+    for i, candle in enumerate(reversed(ohlcv_data)):
+        close = candle['trade_price']
+        open_ = candle['opening_price']
+        high = candle['high_price']
+        low = candle['low_price']
+
+        ha_close = (open_ + high + low + close) / 4
+
+        if i == 0:
+            ha_open = (open_ + close) / 2
+        else:
+            prev = ha_data[-1]
+            ha_open = (prev['open'] + prev['close']) / 2
+
+        ha_high = max(high, ha_open, ha_close)
+        ha_low = min(low, ha_open, ha_close)
+
+        ha_data.append({
+            'open': ha_open,
+            'close': ha_close,
+            'high': ha_high,
+            'low': ha_low,
+        })
+
+    return list(reversed(ha_data))
+
+# 추세 판단
+
+def analyze_trend(ha_data):
+    recent = ha_data[-10:]
+    count_red = sum(1 for c in recent[:-1] if c['close'] < c['open'])
+    last_is_green = recent[-1]['close'] > recent[-1]['open']
+    return count_red >= 3 and last_is_green
+
+def detect_price_pattern(ohlcv_data):
+    highs = [c['high_price'] for c in ohlcv_data]
+    lows = [c['low_price'] for c in ohlcv_data]
+
+    recent_high = max(highs[-5:])
+    recent_low = min(lows[-5:])
+
+    high_breaks = sum(1 for i in range(1, len(highs)) if highs[i] > max(highs[:i]))
+    low_breaks = sum(1 for i in range(1, len(lows)) if lows[i] < min(lows[:i]))
+
+    if high_breaks >= 2:
+        return "상승중"
+    elif low_breaks >= 2:
+        return "하락중"
+    else:
+        return "보합중"
+
+# 메인 루프
+
 async def monitor():
-    log("🚀 가격 모니터링 시스템 시작 (텔레그램 알림 모드)")
-    await send_telegram_alert("🚀 가격 모니터링 시스템 시작됨 (텔레그램 알림 모드)")
+    log("🚀 추세 모니터링 시스템 시작")
+    await send_telegram_alert("🚀 추세 모니터링 시스템 시작됨")
 
     while True:
         try:
             await send_healthcheck()
-            all_top_data = get_top_krw_markets(20)
-            alert_top_data = all_top_data[:10]  # 상위 10개만 감시
+            top_data = get_top_krw_markets()
+            symbols = [c['market'] for c in top_data]
 
-            for coin in alert_top_data:
-                symbol = coin['market']
-                current_price = coin['trade_price']
-                yesterday_price = coin.get('prev_closing_price')
+            buy_alerts = []
+            other_alerts = []
+            trend_messages = []
 
-                if not yesterday_price:
+            for symbol in symbols:
+                ohlcv_data = get_ohlcv(symbol)
+                if len(ohlcv_data) < 10:
                     continue
 
-                prev_day_price[symbol] = yesterday_price
-                percent_from_prev_day = ((current_price - yesterday_price) / yesterday_price) * 100
-                price_history[symbol].append(current_price)
+                ha_data = convert_to_heikin_ashi(ohlcv_data)
+                is_buy = analyze_trend(ha_data)
+                trend = detect_price_pattern(ohlcv_data)
 
-                thresholds = THRESHOLDS_SPECIAL if symbol in SPECIAL_SYMBOLS else THRESHOLDS_DEFAULT
+                coin_name = symbol.split('-')[1]
+                trend_messages.append(f"{coin_name}: {trend}")
+                if is_buy:
+                    buy_alerts.append(coin_name)
+                else:
+                    other_alerts.append(coin_name)
 
-                for minutes_ago in [1, 3]:
-                    if len(price_history[symbol]) >= minutes_ago + 1:
-                        old_price = price_history[symbol][-1 - minutes_ago]
-                        change_percent = ((current_price - old_price) / old_price) * 100
-                        direction = "상승" if change_percent > 0 else "하락"
-
-                        if abs(change_percent) >= thresholds[minutes_ago]:
-                            key = f"{symbol}_{minutes_ago}m"
-                            now = int(time.time())
-                            if now - alerted_at[key] >= 60:
-                                alerted_at[key] = now
-                                msg = f"[{symbol.split('-')[1]}] {minutes_ago}분 전보다 {direction}: {change_percent:+.2f}% (전일: {percent_from_prev_day:+.2f}%)"
-                                log(f"🚨 ALERT: {msg}")
-                                await send_telegram_alert(f"🚨 {msg}")
-
+            msg = "\n".join([
+                "📊 매수 유의 종목:",
+                ", ".join(buy_alerts[:10]) or "없음",
+                "\n📉 그 외 종목:",
+                ", ".join(other_alerts[:10]) or "없음",
+                "\n📈 추세 분석:",
+                "\n".join(trend_messages[:20])
+            ])
+            log(msg)
+            await send_telegram_alert(msg)
             await asyncio.sleep(INTERVAL)
 
         except Exception as e:
