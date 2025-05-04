@@ -161,13 +161,13 @@ async def monitor():
                 else:
                     trends_flat.append(coin_name)
 
-                if is_buy:
+                if is_buy and trend == "상승중":
                     buy_alerts.append(coin_name)
                 else:
                     other_alerts.append(coin_name)
 
             msg = "\n".join([
-                "📊 매수 유의 종목:",
+                "📊 매수 적합 종목:",
                 ", ".join(buy_alerts[:10]) or "없음",
                 "\n📉 그 외 종목:",
                 ", ".join(other_alerts[:10]) or "없음",
