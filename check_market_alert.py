@@ -17,7 +17,6 @@ INTERVAL = 300  # 5분 간격
 last_healthcheck = 0
 
 # 유틸 함수
-
 def log(message):
     timestamp = datetime.now().strftime("[%H:%M:%S]")
     full_message = f"{timestamp} {message}"
@@ -41,7 +40,6 @@ async def send_healthcheck():
         last_healthcheck = now
 
 # API 호출 함수
-
 def get_top_krw_markets(limit=20):
     try:
         market_data = requests.get("https://api.upbit.com/v1/market/all").json()
@@ -65,7 +63,6 @@ def get_ohlcv(symbol):
         return []
 
 # 하이킨 아시 변환
-
 def convert_to_heikin_ashi(ohlcv_data):
     ha_data = []
     for i, candle in enumerate(reversed(ohlcv_data)):
@@ -95,7 +92,6 @@ def convert_to_heikin_ashi(ohlcv_data):
     return list(reversed(ha_data))
 
 # 추세 판단
-
 def analyze_trend(ha_data):
     recent = ha_data[-10:]
     count_red = sum(1 for c in recent[:-1] if c['close'] < c['open'])
@@ -127,7 +123,6 @@ def detect_price_pattern(ohlcv_data):
         return "보합중"
 
 # 메인 루프
-
 async def monitor():
     log("🚀 추세 모니터링 시스템 시작")
     await send_telegram_alert("🚀 추세 모니터링 시스템 시작됨")
@@ -138,8 +133,6 @@ async def monitor():
             top_data = get_top_krw_markets()
             symbols = [c['market'] for c in top_data]
 
-            buy_alerts = []
-            other_alerts = []
             trends_up = []
             trends_down = []
             trends_flat = []
@@ -150,10 +143,9 @@ async def monitor():
                     continue
 
                 ha_data = convert_to_heikin_ashi(ohlcv_data)
-                is_buy = analyze_trend(ha_data)
                 trend = detect_price_pattern(ohlcv_data)
-
                 coin_name = symbol.split('-')[1]
+
                 if trend == "상승중":
                     trends_up.append(coin_name)
                 elif trend == "하락중":
@@ -161,27 +153,18 @@ async def monitor():
                 else:
                     trends_flat.append(coin_name)
 
-                if is_buy and trend == "상승중":
-                    buy_alerts.append(coin_name)
-                else:
-                    other_alerts.append(coin_name)
-
             msg = "\n".join([
-                "📊 매수 적합 종목:",
-                ", ".join(buy_alerts[:10]) or "없음",
-                "\n📉 그 외 종목:",
-                ", ".join(other_alerts[:10]) or "없음",
-                "\n📈 추세 분석:",
+                "📈 추세 분석:",
                 f"상승중: {', '.join(trends_up) or '없음'}",
-                f"하락중: {', '.join(trends_down) or '없음'}",
-                f"보합중: {', '.join(trends_flat) or '없음'}"
+                f"보합중: {', '.join(trends_flat) or '없음'}",
+                f"하락중: {', '.join(trends_down) or '없음'}"
             ])
             log(msg)
             await send_telegram_alert(msg)
             await asyncio.sleep(INTERVAL)
 
         except Exception as e:
-            log(f"오류 발생: {e}")
+            log(f"❌ 오류 발생: {e}")
             await asyncio.sleep(10)
 
 if __name__ == "__main__":
