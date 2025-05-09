@@ -25,7 +25,7 @@ def log(message):
 
 async def send_telegram_alert(msg):
     try:
-        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg, parse_mode="HTML")
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
     except Exception as e:
         log(f"Telegram 전송 실패: {e}")
 
@@ -128,7 +128,7 @@ async def monitor():
                 trend = detect_heikin_ashi_trend(ha_data)
                 coin_name = symbol.split('-')[1]
 
-                # 현재가와 전일종가로 변동률 계산
+                # 변동률 계산 및 이모지 적용
                 ticker = ticker_info.get(symbol)
                 if not ticker:
                     continue
@@ -136,8 +136,8 @@ async def monitor():
                     current_price = ticker['trade_price']
                     prev_close = ticker['prev_closing_price']
                     change_rate = ((current_price - prev_close) / prev_close) * 100
-                    color = "blue" if change_rate >= 0 else "red"
-                    change_rate_str = f"<font color='{color}'>{change_rate:+.1f}%</font>"
+                    emoji = "🔹" if change_rate >= 0 else "🔸"
+                    change_rate_str = f"{emoji} {change_rate:+.1f}%"
                 except Exception as e:
                     change_rate_str = "N/A"
 
