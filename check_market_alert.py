@@ -1,7 +1,6 @@
 import time
 import requests
 from datetime import datetime
-from collections import defaultdict
 import asyncio
 from telegram import Bot
 
@@ -16,7 +15,7 @@ HEALTHCHECK_INTERVAL = 3600
 INTERVAL = 300  # 5분 간격
 last_healthcheck = 0
 
-# 유틸 함수
+# ===== 유틸 함수 =====
 def log(message):
     timestamp = datetime.now().strftime("[%H:%M:%S]")
     full_message = f"{timestamp} {message}"
@@ -39,7 +38,7 @@ async def send_healthcheck():
         await send_telegram_alert(message)
         last_healthcheck = now
 
-# API 호출 함수
+# ===== 업비트 API =====
 def get_top_krw_markets(limit=20):
     try:
         market_data = requests.get("https://api.upbit.com/v1/market/all").json()
@@ -62,7 +61,7 @@ def get_ohlcv(symbol):
         log(f"❌ OHLCV 가져오기 실패 ({symbol}): {e}")
         return []
 
-# 하이킨 아시 변환
+# ===== 하이킨 아시 변환 =====
 def convert_to_heikin_ashi(ohlcv_data):
     ha_data = []
     for i, candle in enumerate(reversed(ohlcv_data)):
@@ -91,41 +90,23 @@ def convert_to_heikin_ashi(ohlcv_data):
 
     return list(reversed(ha_data))
 
-# 추세 판단
-def analyze_trend(ha_data):
-    recent = ha_data[-10:]
-    count_red = sum(1 for c in recent[:-1] if c['close'] < c['open'])
-    last_is_green = recent[-1]['close'] > recent[-1]['open']
-    return count_red >= 3 and last_is_green
+# ===== 하이킨 아시 기반 추세 판단 =====
+def detect_heikin_ashi_trend(ha_data):
+    recent = ha_data[-20:]  # 최근 20개 캔들 기준
+    up_count = sum(1 for c in recent if c['close'] > c['open'])
+    down_count = sum(1 for c in recent if c['close'] < c['open'])
 
-def detect_price_pattern(ohlcv_data):
-    highs = [c['high_price'] for c in ohlcv_data]
-    lows = [c['low_price'] for c in ohlcv_data]
-
-    recent_highs = highs[-20:]
-    recent_lows = lows[-20:]
-
-    high_range = max(recent_highs)
-    low_range = min(recent_lows)
-    spread_ratio = (high_range - low_range) / low_range * 100
-
-    if spread_ratio < 3.0:
-        return "보합중"
-
-    high_breaks = sum(1 for i in range(5, len(highs)) if highs[i] > max(highs[i-5:i]) * 1.01)
-    low_breaks = sum(1 for i in range(5, len(lows)) if lows[i] < min(lows[i-5:i]) * 0.99)
-
-    if high_breaks >= 2:
+    if up_count >= 14:
         return "상승중"
-    elif low_breaks >= 2:
+    elif down_count >= 14:
         return "하락중"
     else:
         return "보합중"
 
-# 메인 루프
+# ===== 메인 모니터링 루프 =====
 async def monitor():
-    log("🚀 추세 모니터링 시스템 시작")
-    await send_telegram_alert("🚀 추세 모니터링 시스템 시작됨")
+    log("🚀 하이킨 아시 추세 모니터링 시작")
+    await send_telegram_alert("🚀 하이킨 아시 추세 모니터링 시스템 시작됨")
 
     while True:
         try:
@@ -139,11 +120,11 @@ async def monitor():
 
             for symbol in symbols:
                 ohlcv_data = get_ohlcv(symbol)
-                if len(ohlcv_data) < 10:
+                if len(ohlcv_data) < 20:
                     continue
 
                 ha_data = convert_to_heikin_ashi(ohlcv_data)
-                trend = detect_price_pattern(ohlcv_data)
+                trend = detect_heikin_ashi_trend(ha_data)
                 coin_name = symbol.split('-')[1]
 
                 if trend == "상승중":
@@ -154,7 +135,7 @@ async def monitor():
                     trends_flat.append(coin_name)
 
             msg = "\n".join([
-                "📈 추세 분석:",
+                "📈 하이킨 아시 추세 분석:",
                 f"상승중: {', '.join(trends_up) or '없음'}",
                 f"보합중: {', '.join(trends_flat) or '없음'}",
                 f"하락중: {', '.join(trends_down) or '없음'}"
@@ -167,5 +148,6 @@ async def monitor():
             log(f"❌ 오류 발생: {e}")
             await asyncio.sleep(10)
 
+# ===== 실행 시작 =====
 if __name__ == "__main__":
     asyncio.run(monitor())
