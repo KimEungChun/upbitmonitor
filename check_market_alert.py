@@ -103,6 +103,17 @@ def detect_heikin_ashi_trend(ha_data):
     else:
         return "보합중"
 
+def get_btc_dominance():
+    try:
+        url = "https://api.coingecko.com/api/v3/global"
+        response = requests.get(url)
+        data = response.json()
+        dominance = data["data"]["market_cap_percentage"]["btc"]
+        return dominance
+    except Exception as e:
+        log(f"❌ BTC 도미넌스 가져오기 실패: {e}")
+        return None
+    
 # ===== 메인 모니터링 루프 =====
 async def monitor():
     log("🚀 하이킨 아시 추세 모니터링 시작")
@@ -128,7 +139,6 @@ async def monitor():
                 trend = detect_heikin_ashi_trend(ha_data)
                 coin_name = symbol.split('-')[1]
 
-                # 변동률 계산 및 이모지 적용
                 ticker = ticker_info.get(symbol)
                 if not ticker:
                     continue
@@ -136,7 +146,7 @@ async def monitor():
                     current_price = ticker['trade_price']
                     prev_close = ticker['prev_closing_price']
                     change_rate = ((current_price - prev_close) / prev_close) * 100
-                    emoji = "🔸" if change_rate >= 0 else "🔹"
+                    emoji = "🔹" if change_rate >= 0 else "🔸"
                     change_rate_str = f"{emoji} {change_rate:+.1f}%"
                 except Exception as e:
                     change_rate_str = "N/A"
@@ -150,12 +160,37 @@ async def monitor():
                 else:
                     trends_flat.append(coin_display)
 
+            # ✅ 평균 수익률 계산 (루프 밖)
+            total_change = 0
+            count = 0
+            for item in top_data:
+                try:
+                    current = item['trade_price']
+                    prev = item['prev_closing_price']
+                    change = ((current - prev) / prev) * 100
+                    total_change += change
+                    count += 1
+                except:
+                    continue
+
+            avg_change = total_change / count if count > 0 else 0
+            avg_emoji = "🔹" if avg_change >= 0 else "🔸"
+            avg_str = f"{avg_emoji} {avg_change:+.2f}%"
+
+            # ✅ BTC 도미넌스
+            btc_dominance = get_btc_dominance()
+            btc_dominance_str = f"{btc_dominance:.2f}%" if btc_dominance else "N/A"
+
+            # ✅ 메시지 생성
             msg = "\n".join([
                 "📈 하이킨 아시 추세 분석:",
+                f"📊 업비트 시장 평균 수익률: {avg_str}",
+                f"🪙 BTC 도미넌스: {btc_dominance_str}",
                 f"상승중 {len(trends_up)}개: {', '.join(trends_up) or '없음'}",
                 f"보합중 {len(trends_flat)}개: {', '.join(trends_flat) or '없음'}",
                 f"하락중 {len(trends_down)}개: {', '.join(trends_down) or '없음'}"
             ])
+
             log(msg)
             await send_telegram_alert(msg)
             await asyncio.sleep(INTERVAL)
