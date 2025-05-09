@@ -1,3 +1,25 @@
+물론이죠! 😊  
+요청하신 대로 아래 기능들을 **모두 반영한 전체 소스 코드**를 제공해드릴게요.
+
+---
+
+## ✅ 반영된 기능 요약
+
+| 기능 | 설명 |
+|------|------|
+| ✅ 하이킨 아시 기반 추세 분석 |
+| ✅ 상승/보합/하락 구분 |
+| ✅ 종목별 수익률 표시 (`🔹 +3.2%`, `🔸 -2.1%`) |
+| ✅ 평균 수익률 (금일, 기준: 09:00) |
+| ✅ 어제 평균 수익률 (어제 09:00 ~ 금일 08:59) |
+| ✅ BTC 도미넌스 표시 (CoinGecko API 사용) |
+| ✅ 텔레그램 메시지 전송 |
+
+---
+
+## 📦 전체 파이썬 소스 코드
+
+```python
 import time
 import requests
 from datetime import datetime
@@ -61,6 +83,40 @@ def get_ohlcv(symbol):
         log(f"❌ OHLCV 가져오기 실패 ({symbol}): {e}")
         return []
 
+def get_daily_ohlcv(symbol):
+    try:
+        url = f"https://api.upbit.com/v1/candles/days?market={symbol}&count=2"
+        response = requests.get(url)
+        data = response.json()
+        if len(data) >= 2:
+            return data[1]  # 어제 데이터
+        else:
+            return None
+    except Exception as e:
+        log(f"❌ 일봉 데이터 가져오기 실패 ({symbol}): {e}")
+        return None
+
+def get_yesterday_avg_change(symbols):
+    total_change = 0
+    count = 0
+
+    for symbol in symbols:
+        daily = get_daily_ohlcv(symbol)
+        if not daily:
+            continue
+        try:
+            open_price = daily['opening_price']
+            close_price = daily['trade_price']
+            change = ((close_price - open_price) / open_price) * 100
+            total_change += change
+            count += 1
+        except:
+            continue
+
+    if count == 0:
+        return None
+    return total_change / count
+
 # ===== 하이킨 아시 변환 =====
 def convert_to_heikin_ashi(ohlcv_data):
     ha_data = []
@@ -92,7 +148,7 @@ def convert_to_heikin_ashi(ohlcv_data):
 
 # ===== 하이킨 아시 기반 추세 판단 =====
 def detect_heikin_ashi_trend(ha_data):
-    recent = ha_data[-20:]  # 최근 20개 캔들 기준
+    recent = ha_data[-20:]
     up_count = sum(1 for c in recent if c['close'] > c['open'])
     down_count = sum(1 for c in recent if c['close'] < c['open'])
 
@@ -103,6 +159,7 @@ def detect_heikin_ashi_trend(ha_data):
     else:
         return "보합중"
 
+# ===== BTC 도미넌스 가져오기 =====
 def get_btc_dominance():
     try:
         url = "https://api.coingecko.com/api/v3/global"
@@ -113,7 +170,7 @@ def get_btc_dominance():
     except Exception as e:
         log(f"❌ BTC 도미넌스 가져오기 실패: {e}")
         return None
-    
+
 # ===== 메인 모니터링 루프 =====
 async def monitor():
     log("🚀 하이킨 아시 추세 모니터링 시작")
@@ -160,7 +217,7 @@ async def monitor():
                 else:
                     trends_flat.append(coin_display)
 
-            # ✅ 평균 수익률 계산 (루프 밖)
+            # 평균 수익률 계산 (금일)
             total_change = 0
             count = 0
             for item in top_data:
@@ -177,14 +234,23 @@ async def monitor():
             avg_emoji = "🔹" if avg_change >= 0 else "🔸"
             avg_str = f"{avg_emoji} {avg_change:+.2f}%"
 
-            # ✅ BTC 도미넌스
+            # 어제 평균 수익률 계산
+            yesterday_avg = get_yesterday_avg_change(symbols)
+            if yesterday_avg is not None:
+                y_avg_emoji = "🔹" if yesterday_avg >= 0 else "🔸"
+                y_avg_str = f"{y_avg_emoji} {yesterday_avg:+.2f}%"
+            else:
+                y_avg_str = "N/A"
+
+# BTC 도미넌스
             btc_dominance = get_btc_dominance()
             btc_dominance_str = f"{btc_dominance:.2f}%" if btc_dominance else "N/A"
 
-            # ✅ 메시지 생성
+            # 텔레그램 메시지 생성
             msg = "\n".join([
                 "📈 하이킨 아시 추세 분석:",
-                f"📊 업비트 시장 평균 수익률: {avg_str}",
+                f"📊 오늘 시장 평균 수익률 (09:00 기준): {avg_str}",
+                f"📉 어제 시장 평균 수익률 (전일 09:00 ~ 금일 08:59): {y_avg_str}",
                 f"🪙 BTC 도미넌스: {btc_dominance_str}",
                 f"상승중 {len(trends_up)}개: {', '.join(trends_up) or '없음'}",
                 f"보합중 {len(trends_flat)}개: {', '.join(trends_flat) or '없음'}",
@@ -198,7 +264,3 @@ async def monitor():
         except Exception as e:
             log(f"❌ 오류 발생: {e}")
             await asyncio.sleep(10)
-
-# ===== 실행 =====
-if __name__ == "__main__":
-    asyncio.run(monitor())
