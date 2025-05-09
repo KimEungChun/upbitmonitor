@@ -113,6 +113,7 @@ async def monitor():
             await send_healthcheck()
             top_data = get_top_krw_markets()
             symbols = [c['market'] for c in top_data]
+            ticker_info = {item['market']: item for item in top_data}
 
             trends_up = []
             trends_down = []
@@ -127,18 +128,32 @@ async def monitor():
                 trend = detect_heikin_ashi_trend(ha_data)
                 coin_name = symbol.split('-')[1]
 
+                # 현재가와 전일종가로 변동률 계산
+                ticker = ticker_info.get(symbol)
+                if not ticker:
+                    continue
+                try:
+                    current_price = ticker['trade_price']
+                    prev_close = ticker['prev_closing_price']
+                    change_rate = ((current_price - prev_close) / prev_close) * 100
+                    change_rate_str = f"{change_rate:+.1f}%"
+                except Exception as e:
+                    change_rate_str = "N/A"
+
+                coin_display = f"{coin_name}({change_rate_str})"
+
                 if trend == "상승중":
-                    trends_up.append(coin_name)
+                    trends_up.append(coin_display)
                 elif trend == "하락중":
-                    trends_down.append(coin_name)
+                    trends_down.append(coin_display)
                 else:
-                    trends_flat.append(coin_name)
+                    trends_flat.append(coin_display)
 
             msg = "\n".join([
                 "📈 하이킨 아시 추세 분석:",
-                f"상승중: {', '.join(trends_up) or '없음'}",
-                f"보합중: {', '.join(trends_flat) or '없음'}",
-                f"하락중: {', '.join(trends_down) or '없음'}"
+                f"상승중 {len(trends_up)}개: {', '.join(trends_up) or '없음'}",
+                f"보합중 {len(trends_flat)}개: {', '.join(trends_flat) or '없음'}",
+                f"하락중 {len(trends_down)}개: {', '.join(trends_down) or '없음'}"
             ])
             log(msg)
             await send_telegram_alert(msg)
@@ -148,6 +163,6 @@ async def monitor():
             log(f"❌ 오류 발생: {e}")
             await asyncio.sleep(10)
 
-# ===== 실행 시작 =====
+# ===== 실행 =====
 if __name__ == "__main__":
     asyncio.run(monitor())
