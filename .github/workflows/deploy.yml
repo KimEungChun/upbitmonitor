@@ -1,4 +1,4 @@
-name: Deploy Alert to Azure VM
+name: Deploy Alert to AWS EC2
 
 on:
   push:
