@@ -242,3 +242,6 @@ async def monitor():
         except Exception as e:
             log(f"❌ 오류 발생: {e}")
             await asyncio.sleep(10)
+
+if __name__ == "__main__":
+    asyncio.run(monitor())
