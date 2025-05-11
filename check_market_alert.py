@@ -209,13 +209,13 @@ async def monitor():
                     continue
 
             avg_change = total_change / count if count > 0 else 0
-            avg_emoji = "🔹" if avg_change >= 0 else "🔸"
+            avg_emoji = "🔸" if avg_change >= 0 else "🔹"
             avg_str = f"{avg_emoji} {avg_change:+.2f}%"
 
             # 어제 평균 수익률 계산
             yesterday_avg = get_yesterday_avg_change(symbols)
             if yesterday_avg is not None:
-                y_avg_emoji = "🔹" if yesterday_avg >= 0 else "🔸"
+                y_avg_emoji = "🔸" if yesterday_avg >= 0 else "🔹"
                 y_avg_str = f"{y_avg_emoji} {yesterday_avg:+.2f}%"
             else:
                 y_avg_str = "N/A"
