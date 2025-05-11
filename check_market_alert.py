@@ -168,8 +168,9 @@ async def monitor():
 
             for symbol in symbols:
                 ohlcv_data = get_ohlcv(symbol)
-                if len(ohlcv_data) < 50:  # 기존 20 → 50
+                if len(ohlcv_data) < 20:
                     continue
+
     
                 ha_data = convert_to_heikin_ashi(ohlcv_data)
                 trend = detect_heikin_ashi_trend(ha_data)
