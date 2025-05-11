@@ -1,4 +1,3 @@
-나의 말:
 import time
 import requests
 from datetime import datetime
