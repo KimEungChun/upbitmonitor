@@ -5,15 +5,14 @@ import asyncio
 from telegram import Bot
 
 # ===== 텔레그램 설정 =====
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_TOKEN"
-TELEGRAM_CHAT_ID = YOUR_TELEGRAM_CHAT_ID  # 숫자
-
+TELEGRAM_TOKEN = "7475326912:AAHdnqpXNyOiSclg56zFvqu3gTq3CDXexXU"
+TELEGRAM_CHAT_ID = 7692872494
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # ===== 시스템 설정 =====
 LOG_FILE = "price_log.txt"
 HEALTHCHECK_INTERVAL = 3600
-INTERVAL = 300
+INTERVAL = 300  # 5분 간격
 last_healthcheck = 0
 
 # ===== 유틸 함수 =====
@@ -56,7 +55,7 @@ def get_top_krw_markets(limit=20):
 
 def get_ohlcv(symbol):
     try:
-        url = f"https://api.upbit.com/v1/candles/minutes/5?market={symbol}&count=30"
+        url = f"https://api.upbit.com/v1/candles/minutes/5?market={symbol}&count=100"
         return requests.get(url).json()
     except Exception as e:
         log(f"❌ OHLCV 가져오기 실패 ({symbol}): {e}")
@@ -68,7 +67,7 @@ def get_daily_ohlcv(symbol):
         response = requests.get(url)
         data = response.json()
         if len(data) >= 2:
-            return data[1]
+            return data[1]  # 어제 데이터
         else:
             return None
     except Exception as e:
@@ -96,41 +95,65 @@ def get_yesterday_avg_change(symbols):
         return None
     return total_change / count
 
-# ===== 수정된 추세 판단 함수 (하이킨 아시 제거, 캔들 기준 분석) =====
-def detect_custom_trend(candles):
-    if len(candles) < 30:
-        return "보합중"
+# ===== 하이킨 아시 변환 =====
+def convert_to_heikin_ashi(ohlcv_data):
+    ha_data = []
+    for i, candle in enumerate(reversed(ohlcv_data)):
+        close = candle['trade_price']
+        open_ = candle['opening_price']
+        high = candle['high_price']
+        low = candle['low_price']
 
-    candles = list(reversed(candles))  # 시간 순 정렬
-    base_high = candles[0]['high_price']
-    base_low = candles[0]['low_price']
-    high_break = False
-    low_break = False
-    up_count = 0
-    down_count = 0
+        ha_close = (open_ + high + low + close) / 4
 
-    for c in candles[1:]:
-        if c['high_price'] > base_high:
-            high_break = True
-        if c['low_price'] < base_low:
-            low_break = True
+        if i == 0:
+            ha_open = (open_ + close) / 2
+        else:
+            prev = ha_data[-1]
+            ha_open = (prev['open'] + prev['close']) / 2
 
-        if c['trade_price'] > c['opening_price']:
-            up_count += 1
-        elif c['trade_price'] < c['opening_price']:
-            down_count += 1
+        ha_high = max(high, ha_open, ha_close)
+        ha_low = min(low, ha_open, ha_close)
 
-    if high_break and up_count >= 15:
+        ha_data.append({
+            'open': ha_open,
+            'close': ha_close,
+            'high': ha_high,
+            'low': ha_low,
+        })
+
+    return list(reversed(ha_data))
+
+# ===== 하이킨 아시 기반 추세 판단 =====
+def detect_heikin_ashi_trend(ha_data):
+    recent = ha_data[-50:]  # 여기서 20 → 50으로 변경
+    up_count = sum(1 for c in recent if c['close'] > c['open'])
+    down_count = sum(1 for c in recent if c['close'] < c['open'])
+
+    if up_count >= 35:  # 기준도 14 → 35 등으로 비율 유지해서 변경
         return "상승중"
-    elif low_break and down_count >= 15:
+    elif down_count >= 35:
         return "하락중"
     else:
         return "보합중"
 
-# ===== 메인 루프 =====
+
+# ===== BTC 도미넌스 가져오기 =====
+def get_btc_dominance():
+    try:
+        url = "https://api.coingecko.com/api/v3/global"
+        response = requests.get(url)
+        data = response.json()
+        dominance = data["data"]["market_cap_percentage"]["btc"]
+        return dominance
+    except Exception as e:
+        log(f"❌ BTC 도미넌스 가져오기 실패: {e}")
+        return None
+
+# ===== 메인 모니터링 루프 =====
 async def monitor():
-    log("🚀 캔들 기반 추세 모니터링 시작")
-    await send_telegram_alert("🚀 캔들 기반 추세 모니터링 시스템 시작 됨")
+    log("🚀 하이킨 아시 추세 모니터링 시작")
+    await send_telegram_alert("🚀 하이킨 아시 추세 모니터링 시스템 시작 됨")
 
     while True:
         try:
@@ -145,11 +168,13 @@ async def monitor():
 
             for symbol in symbols:
                 ohlcv_data = get_ohlcv(symbol)
-                if len(ohlcv_data) < 30:
+                if len(ohlcv_data) < 50:  # 기존 20 → 50
                     continue
-
-                trend = detect_custom_trend(ohlcv_data)
+    
+                ha_data = convert_to_heikin_ashi(ohlcv_data)
+                trend = detect_heikin_ashi_trend(ha_data)
                 coin_name = symbol.split('-')[1]
+
                 ticker = ticker_info.get(symbol)
                 if not ticker:
                     continue
@@ -188,7 +213,7 @@ async def monitor():
             avg_emoji = "🔸" if avg_change >= 0 else "🔹"
             avg_str = f"{avg_emoji} {avg_change:+.2f}%"
 
-            # 어제 평균 수익률
+            # 어제 평균 수익률 계산
             yesterday_avg = get_yesterday_avg_change(symbols)
             if yesterday_avg is not None:
                 y_avg_emoji = "🔸" if yesterday_avg >= 0 else "🔹"
@@ -196,10 +221,16 @@ async def monitor():
             else:
                 y_avg_str = "N/A"
 
+# BTC 도미넌스
+            btc_dominance = get_btc_dominance()
+            btc_dominance_str = f"{btc_dominance:.2f}%" if btc_dominance else "N/A"
+
+            # 텔레그램 메시지 생성
             msg = "\n".join([
-                "📈 추세 분석:",
+                "📈 하이킨 아시 추세 분석:",
                 f"📊 오늘 시장 평균 수익률 (09:00 기준): {avg_str}",
                 f"📉 어제 시장 평균 수익률 (전일 09:00 ~ 금일 08:59): {y_avg_str}",
+                f"🪙 BTC 도미넌스: {btc_dominance_str}",
                 f"상승중 {len(trends_up)}개: {', '.join(trends_up) or '없음'}",
                 f"보합중 {len(trends_flat)}개: {', '.join(trends_flat) or '없음'}",
                 f"하락중 {len(trends_down)}개: {', '.join(trends_down) or '없음'}"
