@@ -1,3 +1,4 @@
+나의 말:
 import time
 import requests
 from datetime import datetime
@@ -126,17 +127,16 @@ def convert_to_heikin_ashi(ohlcv_data):
 
 # ===== 하이킨 아시 기반 추세 판단 =====
 def detect_heikin_ashi_trend(ha_data):
-    recent = ha_data[-50:]  # 여기서 20 → 50으로 변경
+    recent = ha_data[-20:]
     up_count = sum(1 for c in recent if c['close'] > c['open'])
     down_count = sum(1 for c in recent if c['close'] < c['open'])
 
-    if up_count >= 35:  # 기준도 14 → 35 등으로 비율 유지해서 변경
+    if up_count >= 14:
         return "상승중"
-    elif down_count >= 35:
+    elif down_count >= 14:
         return "하락중"
     else:
         return "보합중"
-
 
 # ===== BTC 도미넌스 가져오기 =====
 def get_btc_dominance():
@@ -171,7 +171,6 @@ async def monitor():
                 if len(ohlcv_data) < 20:
                     continue
 
-    
                 ha_data = convert_to_heikin_ashi(ohlcv_data)
                 trend = detect_heikin_ashi_trend(ha_data)
                 coin_name = symbol.split('-')[1]
