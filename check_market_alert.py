@@ -181,7 +181,7 @@ async def monitor():
                     current_price = ticker['trade_price']
                     prev_close = ticker['prev_closing_price']
                     change_rate = ((current_price - prev_close) / prev_close) * 100
-                    emoji = "🔹" if change_rate >= 0 else "🔸"
+                    emoji = "🔸" if change_rate >= 0 else "🔹"
                     change_rate_str = f"{emoji} {change_rate:+.1f}%"
                 except Exception as e:
                     change_rate_str = "N/A"
