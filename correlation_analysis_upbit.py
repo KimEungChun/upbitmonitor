@@ -3,7 +3,6 @@ import requests
 import csv
 import math
 from datetime import datetime
-from market_data_pool import MarketDataPool
 from telegram import Bot
 import asyncio
 
@@ -31,6 +30,21 @@ async def send_telegram_alert(msg):
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
     except Exception as e:
         log(f"Telegram 전송 실패: {e}")
+
+# ===== 종목 리스트 수집 =====
+def get_top_krw_markets(limit=20):
+    try:
+        market_data = requests.get("https://api.upbit.com/v1/market/all").json()
+        krw_markets = [m['market'] for m in market_data if m['market'].startswith("KRW-")]
+
+        ticker_url = f"https://api.upbit.com/v1/ticker?markets={','.join(krw_markets)}"
+        ticker_data = requests.get(ticker_url).json()
+
+        sorted_data = sorted(ticker_data, key=lambda x: x['acc_trade_price_24h'], reverse=True)
+        return [item['market'] for item in sorted_data[:limit]]
+    except Exception as e:
+        log(f"❌ 종목 리스트 가져오기 실패: {e}")
+        return []
 
 # ===== 캔들 데이터 수집 =====
 def fetch_closes(symbol, count=CANDLE_COUNT):
@@ -92,8 +106,7 @@ def build_correlation_csv(symbols, filename=CSV_FILENAME):
 async def main():
     log("🚀 상관관계 분석 시작")
     await send_telegram_alert("🚀 상관관계 분석 시스템 시작됨")
-    pool = MarketDataPool(mode='A')
-    watchlist = pool.get_top_symbols()
+    watchlist = get_top_krw_markets()
     log(f"🔍 감시 종목 수: {len(watchlist)}")
     result = build_correlation_csv(watchlist)
     await send_telegram_alert(f"🎯 분석 완료 - 커플링 {len(result)}건 발견됨")
