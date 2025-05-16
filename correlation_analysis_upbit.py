@@ -2,6 +2,9 @@ import time
 import requests
 import pandas as pd
 from market_data_pool import MarketDataPool
+import sys
+print("✅ 현재 Python 실행 경로:", sys.executable)
+
 
 # === 설정 ===
 INTERVAL = 0.25  # 업비트 API 요청 간격 (초)
